@@ -6,8 +6,8 @@ from inline SVG, so a `prefers-color-scheme` media query inside the document is
 silently dropped. The README pairs them with <picture>, which GitHub honours.
 
 A README diagram is studied, not narrated, so it is COMPLETE rather than
-minimal: the image pipeline, Cloud NAT, Secret Manager, the Filestore mount
-and the domain membership of both hosts are all on it.
+minimal: Cloud NAT, the database, the secret store and the domain
+membership of both targets are all on it.
 
 Run:  python3 make_diagram.py
 """
@@ -71,8 +71,6 @@ ICONS = {
                 '<line x1="12" x2="12" y1="17" y2="21"/>'],
     "terminal": ['<polyline points="4 17 10 11 4 5"/>',
                  '<line x1="12" x2="20" y1="19" y2="19"/>'],
-    "file": ['<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>',
-             '<path d="M14 2v4a2 2 0 0 0 2 2h4"/>'],
     "users": ['<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>',
               '<circle cx="9" cy="7" r="4"/>',
               '<path d="M22 21v-2a4 4 0 0 0-3-3.87"/>',
@@ -93,86 +91,74 @@ def gutter_x(c):
     return COL[c] + NW + GUTTER / 2
 
 
-def gutter_y(r):
-    """Centre of the gap below row r."""
-    return ROW[r] + NH + (ROW[1] - ROW[0] - NH) / 2
-
-
 # ------------------------------------------------------------------------------
 # Layout
 # ------------------------------------------------------------------------------
-# The desktop is the hub (amber, the subject of the project). The image
-# pipeline runs down the left column into it, RDP clients come in from above,
-# the Windows admin host sits beside it, and the domain controller anchors the
-# bottom, with Filestore, Secret Manager and Cloud NAT around them.
-DESK, SLUG, A_DESK = "MATE", "mate", "a MATE"
-TOOLS = "Packer: MATE, XRDP, dev tools"
-
+# The request path runs down the middle column: browser -> load balancer ->
+# Guacamole, which is the hub (amber, the subject of the project). Its
+# supporting pieces sit beside it -- PostgreSQL left, Secret Manager right,
+# Cloud NAT up in the top row -- its two targets fan out below, and the domain
+# controller anchors the bottom, joined to everything that authenticates.
+#
 # id: (x, y, colour key, icon, title, subtitle)
 NODES.update({
-    "ubuntu":   (COL[0], ROW[0], "navy", "layers", "Ubuntu 26.04 LTS",
-                 "ubuntu-os-cloud image family"),
-    "client":   (COL[1], ROW[0], "navy", "globe", "RDP client",
-                 "from the internet, AD credentials"),
-    "image":    (COL[0], ROW[1], "blue", "layers", f"{DESK} Image",
-                 TOOLS),
-    "desk":     (COL[1], ROW[1], "amber", "monitor", f"{DESK} Desktop",
-                 f"{SLUG}-&lt;suffix&gt;, XRDP, {SLUG}-subnet"),
-    "windows":  (COL[2], ROW[1], "blue", "monitor", "Windows Server 2022",
-                 "win-ad-&lt;suffix&gt;, RSAT, startup script"),
-    "files":    (COL[0], ROW[2], "store", "database", "Filestore (NFS)",
-                 "/home and /nfs, Basic HDD"),
-    "secrets":  (COL[2], ROW[2], "store", "key", "Secret Manager",
-                 "AD admin + user passwords"),
-    "nat":      (COL[0], ROW[3], "navy", "network", "Cloud NAT",
-                 "Cloud Router, outbound for the DC"),
+    "browser":  (COL[0], ROW[0], "navy", "globe", "Browser", "HTTPS only, no client"),
+    "alb":      (COL[1], ROW[0], "blue", "route", "Load Balancer",
+                 "global external ALB, self-signed cert"),
+    "nat":      (COL[2], ROW[0], "navy", "network", "Cloud NAT",
+                 "outbound for the private servers"),
+    "postgres": (COL[0], ROW[1], "store", "database", "PostgreSQL",
+                 "connections, group permissions"),
+    "guac":     (COL[1], ROW[1], "amber", "layers", "Guacamole",
+                 "guacd + web app, private VM"),
+    "secrets":  (COL[2], ROW[1], "store", "key", "Secret Manager",
+                 "AD credentials"),
+    "windows":  (COL[0], ROW[2], "blue", "monitor", "Windows Server 2022",
+                 "private, RDP from Guacamole only"),
+    "linux":    (COL[2], ROW[2], "blue", "monitor", "MATE 26.04",
+                 "Packer image: MATE + XRDP, private"),
     "dc":       (COL[1], ROW[3], "purple", "users", "mini-AD (Samba DC)",
-                 "users, groups, Kerberos, DNS"),
+                 "users, groups, LDAPS, Kerberos, DNS"),
 })
 
-ubu, cli = _r("ubuntu"), _r("client")
-img, m, win = _r("image"), _r("desk"), _r("windows")
-fs, sm, nat, dc = _r("files"), _r("secrets"), _r("nat"), _r("dc")
-FAN = 60                      # the three lines leaving the desktop's underside
-SIDE = 30                     # the two lines on Windows' left side
-OUT = win[2] + 20             # Windows' domain line runs down the right margin
+g = _r("guac")
+alb, brw, nat = _r("alb"), _r("browser"), _r("nat")
+pg, sec, win, lin, dc = _r("postgres"), _r("secrets"), _r("windows"), _r("linux"), _r("dc")
+FAN = 60                      # the three lines leaving Guacamole's underside
+MID3 = dc[5]                             # members enter the DC box from its sides
 
 # id: (path, colour key, label, label_x, label_y, anchor)
 EDGES = {
-    "e_packer": (f"M{ubu[4]},{ubu[3]} V{img[1] - 5}", "navy",
-                 "packer build", ubu[4] + 14, gutter_y(0) + 6, "start"),
-    "e_launch": (f"M{img[2]},{img[5]} H{m[0] - 5}", "navy",
-                 "custom image", gutter_x(0), img[5] - 12, "middle"),
-    "e_rdp":    (f"M{cli[4]},{cli[3]} V{m[1] - 5}", "line",
-                 "RDP :3389, SSH :22", cli[4] + 14, gutter_y(0) + 6, "start"),
-    "e_winrdp": (f"M{cli[2]},{cli[5]} H{win[4]} V{win[1] - 5}", "line",
-                 "RDP :3389", win[4] + 14, gutter_y(0) + 6, "start"),
-    "e_smb":    (f"M{win[0]},{win[5]} H{m[2] + 5}", "local",
-                 "SMB: Z: is /nfs", gutter_x(1), win[5] - 12, "middle"),
-    "e_nfs":    (f"M{m[4] - FAN},{m[3]} V{fs[5]} H{fs[2] + 5}", "store",
-                 "NFS v3 :2049", (m[4] - FAN + fs[2]) / 2, fs[5] - 12,
-                 "middle"),
-    "e_sm":     (f"M{m[4] + FAN},{m[3]} V{sm[5]} H{sm[0] - 5}", "store",
-                 "join password", (m[4] + FAN + sm[0]) / 2, sm[5] - 12, "middle"),
-    "e_winsm":  (f"M{win[4]},{win[3]} V{sm[1] - 5}", "store",
-                 "join password", win[4] + 14, gutter_y(1) + 6, "start"),
-    "e_sssd":   (f"M{m[4]},{m[3]} V{dc[1] - 5}", "purple",
-                 "SSSD (AD provider)", m[4] + 14, gutter_y(2) + 6, "start"),
-    "e_winad":  (f"M{win[2]},{win[5]} H{OUT} V{dc[5]} H{dc[2] + 5}", "purple",
-                 "domain member", (dc[2] + sm[4]) / 2, dc[5] - 12, "middle"),
-    "e_nat":    (f"M{dc[0]},{dc[5]} H{nat[2] + 5}", "navy",
-                 "outbound", gutter_x(0), dc[5] - 12, "middle"),
+    "e_https": (f"M{brw[2]},{brw[5]} L{alb[0] - 5},{alb[5]}", "line",
+                "HTTPS :443", gutter_x(0), brw[5] - 12, "middle"),
+    "e_alb":   (f"M{alb[4]},{alb[3]} L{alb[4]},{g[1] - 5}", "line",
+                "HTTP :8080", alb[4] - 16, (alb[3] + g[1]) / 2 + 6, "end"),
+    "e_nat":   (f"M{g[2] - 70},{g[1]} V{(alb[3] + g[1]) / 2} H{nat[4]} V{nat[3] + 5}",
+                "navy", "image pulls, updates", gutter_x(1) + 40,
+                (alb[3] + g[1]) / 2 - 10, "middle"),
+    "e_pg":    (f"M{g[0]},{g[5]} L{pg[2] + 5},{pg[5]}", "store",
+                "connections", gutter_x(0), g[5] - 12, "middle"),
+    "e_sec":   (f"M{g[2]},{g[5]} L{sec[0] - 5},{sec[5]}", "store",
+                "bind password", gutter_x(1), g[5] - 12, "middle"),
+    "e_rdp":   (f"M{g[4] - FAN},{g[3]} V{win[5]} H{win[2] + 5}", "local",
+                "RDP :3389", (g[4] - FAN + win[2]) / 2, win[5] - 12, "middle"),
+    "e_ssh":   (f"M{g[4] + FAN},{g[3]} V{lin[5]} H{lin[0] - 5}", "local",
+                "RDP :3389 + SSH :22", (g[4] + FAN + lin[0]) / 2, lin[5] - 12, "middle"),
+    "e_ldaps": (f"M{g[4]},{g[3]} V{dc[1] - 5}", "purple",
+                "LDAPS :636 sign-in", g[4] + 14, dc[1] - 30, "start"),
+    "e_winad": (f"M{win[4]},{win[3]} V{MID3} H{dc[0] - 5}", "purple",
+                "domain member", (win[4] + dc[0]) / 2, MID3 - 12, "middle"),
+    "e_linad": (f"M{lin[4]},{lin[3]} V{MID3} H{dc[2] + 5}", "purple",
+                "SSSD (AD provider)", (lin[4] + dc[2]) / 2, MID3 - 12, "middle"),
 }
 
-ALT = (f"Packer builds {A_DESK} image from Canonical's Ubuntu 26.04 LTS image "
-       f"family, and the {DESK} desktop VM is created from it. An RDP client "
-       f"reaches the {DESK} desktop over RDP or SSH, and a Windows Server 2022 "
-       f"admin VM over RDP; both VMs and the domain controller are in "
-       f"{SLUG}-subnet. The desktop mounts its home directories and a shared "
-       f"area from Filestore over NFS, and shares that area to the Windows VM "
-       f"over SMB. Both VMs read the AD join password from Secret Manager "
-       f"through their service account and join the mini-AD domain controller, "
-       f"which has no external IP and reaches the internet through Cloud NAT.")
+ALT = ("A browser reaches an internet-facing load balancer over HTTPS; it "
+       "forwards to a private Guacamole server, which signs users in against the "
+       "mini-AD domain controller over LDAPS, keeps its connections in PostgreSQL, "
+       "reads its LDAP bind password from Secret Manager, and opens RDP to a "
+       "private Windows host, and RDP and SSH to a private MATE desktop host built "
+       "from a Packer image, both joined to the domain. "
+       "The private servers reach the internet through Cloud NAT.")
 
 # ------------------------------------------------------------------------------
 # Rendering

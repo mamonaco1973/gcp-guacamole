@@ -15,7 +15,7 @@ echo "NOTE: Validating that required commands are available in PATH."
 # Required Commands
 # ------------------------------------------------------------------------------
 
-# List of required CLI tools for the GCP Xubuntu build.
+# List of required CLI tools for the GCP Guacamole build.
 commands=("gcloud" "terraform" "packer" "jq")
 
 # Track whether all commands are present.

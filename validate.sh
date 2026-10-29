@@ -62,6 +62,8 @@ step "HTTP redirects to HTTPS"
 LOCATION=""
 for ((i = 0; i < 20; i++)); do
   LOCATION="$(curl -s --max-time 15 -o /dev/null -w '%{redirect_url}' "${URL/https:/http:}" || true)"
+  # The load balancer spells out the default port (https://<ip>:443/).
+  LOCATION="${LOCATION/:443\//\/}"
   [ "${LOCATION}" = "${URL}" ] && break
   sleep 15
 done
