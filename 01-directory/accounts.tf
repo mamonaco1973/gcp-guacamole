@@ -108,7 +108,7 @@ locals {
 # ==============================================================================
 resource "google_secret_manager_secret" "ad_secret" {
   for_each  = local.ad_users
-  secret_id = "${each.key}-ad-credentials-mate"
+  secret_id = "${each.key}-ad-credentials-guacamole"
 
   replication {
     auto {}
@@ -117,7 +117,7 @@ resource "google_secret_manager_secret" "ad_secret" {
 
 resource "google_secret_manager_secret_version" "ad_secret_version" {
   for_each = local.ad_users
-  secret  = google_secret_manager_secret.ad_secret[each.key].id
+  secret   = google_secret_manager_secret.ad_secret[each.key].id
 
   secret_data = jsonencode({
     username = "${each.key}@${var.dns_zone}"

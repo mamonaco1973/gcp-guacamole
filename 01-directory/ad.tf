@@ -37,13 +37,13 @@ module "mini_ad" {
 
 locals {
   users_json = templatefile("./scripts/users.json.template", {
-    USER_BASE_DN    = var.user_base_dn            # Base DN for placing new users in LDAP
-    DNS_ZONE        = var.dns_zone                # AD-integrated DNS zone
-    REALM           = var.realm                   # Kerberos realm (FQDN in uppercase)
-    NETBIOS         = var.netbios                 # NetBIOS domain name
-    jsmith_password = local.passwords["jsmith"]  # Random password for John Smith
-    edavis_password = local.passwords["edavis"]  # Random password for Emily Davis
-    rpatel_password = local.passwords["rpatel"]  # Random password for Raj Patel
-    akumar_password = local.passwords["akumar"]  # Random password for Amit Kumar
+    USER_BASE_DN    = var.user_base_dn          # Base DN for placing new users in LDAP
+    DNS_ZONE        = var.dns_zone              # AD-integrated DNS zone
+    REALM           = var.realm                 # Kerberos realm (FQDN in uppercase)
+    NETBIOS         = var.netbios               # NetBIOS domain name
+    jsmith_password = local.passwords["jsmith"] # Random password for John Smith
+    edavis_password = local.passwords["edavis"] # Random password for Emily Davis
+    rpatel_password = local.passwords["rpatel"] # Random password for Raj Patel
+    akumar_password = local.passwords["akumar"] # Random password for Amit Kumar
   })
 }

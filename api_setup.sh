@@ -60,6 +60,7 @@ gcloud services enable cloudresourcemanager.googleapis.com
 gcloud services enable storage.googleapis.com
 gcloud services enable secretmanager.googleapis.com
 
-# Data & file services
-gcloud services enable firestore.googleapis.com
-gcloud services enable file.googleapis.com
+# Cloud DNS (the mini-AD's forwarding zone) and IAP (admin SSH to the
+# private servers: gcloud compute ssh --tunnel-through-iap)
+gcloud services enable dns.googleapis.com
+gcloud services enable iap.googleapis.com

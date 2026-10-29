@@ -1,77 +1,76 @@
 #!/bin/bash
 # ==============================================================================
-# destroy.sh
+# destroy.sh - Guacamole + Active Directory on GCP: teardown
 # ------------------------------------------------------------------------------
-# Purpose:
-#   - Tear down the GCP MATE environment:
-#       01) Destroy servers (Terraform) using the latest MATE image name
-#       02) Delete all MATE images from the project (best-effort)
-#       03) Destroy directory services (Terraform)
+#   1. 03-servers: load balancer, Guacamole, Windows and MATE VMs.
+#   2. Every image in the guacamole-mate-images family.
+#   3. 01-directory: mini-AD, secrets, firewall rules, network.
 #
 # Notes:
-#   - Uses the most recently created image in family 'mate-images' whose name
-#     matches '^mate-image' as an input to 03-servers Terraform destroy.
-#   - Image deletion is best-effort and continues on failures.
+#   - Idempotent: each phase is skipped when there is nothing left to
+#     destroy, so a re-run after a partial failure picks up where it stopped.
+#   - This permanently deletes everything the lab created.
 # ==============================================================================
 
-#!/bin/bash
+set -euo pipefail
+cd "$(dirname "$0")"
+
+./check_env.sh
+export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/credentials.json"
+
+# Resources a Terraform directory still tracks (0 when none or no state).
+# A failed init (e.g. the provider registry unreachable) stops the script:
+# counting it as 0 would skip a phase that still has resources.
+tracked() {
+  (cd "$1" && terraform init -input=false >/dev/null) ||
+    { echo "ERROR: terraform init failed in $1; stopping rather than skipping it. Re-run ./destroy.sh." >&2; return 1; }
+  (cd "$1" && terraform state list 2>/dev/null | wc -l)
+}
+
+images() {
+  gcloud compute images list --filter="family=guacamole-mate-images" \
+    --sort-by="~creationTimestamp" --format="value(name)"
+}
 
 # ------------------------------------------------------------------------------
-# Determine Latest MATE Image
+# Phase 1: destroy the server layer
 # ------------------------------------------------------------------------------
-
-mate_image=$(gcloud compute images list \
-  --filter="name~'^mate-image' AND family=mate-images" \
-  --sort-by="~creationTimestamp" \
-  --limit=1 \
-  --format="value(name)")  # Grabs most recently created image from 'mate-images' family
-
-if [[ -z "$mate_image" ]]; then
-  echo "ERROR: No latest image found for 'mate-image' in family 'mate-images'."
-  exit 1  # Hard fail if no image found — we can't safely destroy without this input
-fi
-
-echo "NOTE: MATE image is $mate_image"
-
+# Its image data source needs a real image name, so look one up while the
+# images still exist.
 # ------------------------------------------------------------------------------
-# Phase 1: Destroy Servers (Terraform)
-# ------------------------------------------------------------------------------
+# Assigned first: set -e ignores a failure inside "[ $(...) ]", but not here.
+count=$(tracked 03-servers)
+if [ "${count}" -gt 0 ]; then
+  echo "NOTE: Destroying the load balancer, Guacamole and servers..."
+  mate_image_name=$(images | head -n 1)
+  echo "NOTE: Using image: ${mate_image_name}"
 
-cd 03-servers
-
-terraform init
-terraform destroy \
-  -var="mate_image_name=$mate_image" \
-  -auto-approve
-
-cd ..
-
-# ------------------------------------------------------------------------------
-# Phase 2: Delete MATE Images (Best-Effort)
-# ------------------------------------------------------------------------------
-
-image_list=$(gcloud compute images list \
-  --format="value(name)" \
-  --filter="name~'^(mate)'")     # Regex match for names starting with 'mate'
-
-# Check if any were found
-if [ -z "$image_list" ]; then
-  echo "NOTE: No images found starting with 'mate'. Continuing..."
+  cd 03-servers
+  terraform destroy -var="mate_image_name=${mate_image_name}" -auto-approve
+  cd ..
 else
-  echo "NOTE: Deleting images..."
-  for image in $image_list; do
-    echo "NOTE: Deleting image: $image"
-    gcloud compute images delete "$image" --quiet || echo "WARNING: Failed to delete image: $image"  # Continue even if deletion fails
-  done
+  echo "NOTE: 03-servers has nothing to destroy; skipping."
 fi
 
 # ------------------------------------------------------------------------------
-# Phase 3: Destroy Directory Services (Terraform)
+# Phase 2: delete every MATE image (Packer creates them outside Terraform)
 # ------------------------------------------------------------------------------
+images | while read -r image; do
+  echo "NOTE: Deleting image: ${image}"
+  gcloud compute images delete "${image}" --quiet
+done
 
-cd 01-directory
+# ------------------------------------------------------------------------------
+# Phase 3: destroy the directory layer (mini-AD, secrets, network)
+# ------------------------------------------------------------------------------
+count=$(tracked 01-directory)
+if [ "${count}" -gt 0 ]; then
+  echo "NOTE: Destroying the mini-AD, secrets and network..."
+  cd 01-directory
+  terraform destroy -auto-approve
+  cd ..
+else
+  echo "NOTE: 01-directory has nothing to destroy; skipping."
+fi
 
-terraform init
-terraform destroy -auto-approve
-
-cd ..
+echo "NOTE: Guacamole lab resources have been destroyed."

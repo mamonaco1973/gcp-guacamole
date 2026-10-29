@@ -47,7 +47,7 @@ data "google_compute_subnetwork" "ad_subnet" {
 # ==============================================================================
 
 variable "mate_image_name" {
-  description = "Name of the Packer-built MATE GCP image"
+  description = "Name of the Packer-built MATE image (guacamole-mate-images family)"
   type        = string
 }
 
@@ -59,6 +59,32 @@ variable "mate_image_name" {
 # ==============================================================================
 
 data "google_compute_image" "mate_packer_image" {
-  name    = var.mate_image_name           # Image name passed in from workflow
+  name    = var.mate_image_name          # Image name passed in from workflow
   project = local.credentials.project_id # Project containing the image
+}
+# ==============================================================================
+# Shared Names
+# ------------------------------------------------------------------------------
+# base_dn : the directory's root, from dns_zone (DC=mcloud,DC=mikecloud,...).
+# dc_fqdn : the DC's name. Guacamole's LDAPS target and the source of the CA
+#           it trusts (http://<dc>/ca.pem). It must be this name, not an IP:
+#           it is the name in the DC's certificate. Resolvable through the
+#           mini-AD module's Cloud DNS forwarding zone.
+# ==============================================================================
+
+locals {
+  base_dn = join(",", [for part in split(".", var.dns_zone) : "DC=${part}"])
+  dc_fqdn = "ad1.${var.dns_zone}"
+}
+
+# ==============================================================================
+# Random Suffix for Instance Names
+# ------------------------------------------------------------------------------
+# Lowercase, no specials: keeps names unique across repeated deployments.
+# ==============================================================================
+
+resource "random_string" "vm_suffix" {
+  length  = 10
+  special = false
+  upper   = false
 }

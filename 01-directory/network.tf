@@ -52,7 +52,7 @@ resource "google_compute_subnetwork" "ad_subnet" {
 # ==============================================================================
 
 resource "google_compute_router" "ad_router" {
-  name    = "mate-ad-router"
+  name    = "guacamole-ad-router"
   network = google_compute_network.ad_vpc.id
   region  = "us-central1"
 }
@@ -68,7 +68,7 @@ resource "google_compute_router" "ad_router" {
 # ==============================================================================
 
 resource "google_compute_router_nat" "ad_nat" {
-  name   = "mate-ad-nat"
+  name   = "guacamole-ad-nat"
   router = google_compute_router.ad_router.name
   region = google_compute_router.ad_router.region
 

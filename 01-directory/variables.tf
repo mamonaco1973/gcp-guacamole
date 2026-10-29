@@ -110,7 +110,7 @@ variable "machine_type" {
 variable "vpc" {
   description = "Network for mini AD instance (e.g., ad-vpc)"
   type        = string
-  default     = "mate-vpc"
+  default     = "guacamole-vpc"
 }
 
 
@@ -123,5 +123,5 @@ variable "vpc" {
 variable "subnet" {
   description = "Sub-network for mini AD instance (e.g., ad-subnet)"
   type        = string
-  default     = "mate-subnet"
+  default     = "guacamole-subnet"
 }

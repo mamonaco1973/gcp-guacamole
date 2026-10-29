@@ -76,7 +76,7 @@ variable "user_base_dn" {
 variable "vpc" {
   description = "Network for mini AD instance (e.g., ad-vpc)"
   type        = string
-  default     = "mate-vpc"
+  default     = "guacamole-vpc"
 }
 
 
@@ -89,5 +89,16 @@ variable "vpc" {
 variable "subnet" {
   description = "Sub-network for mini AD instance (e.g., ad-subnet)"
   type        = string
-  default     = "mate-subnet"
+  default     = "guacamole-subnet"
+}
+# ==============================================================================
+# Deployment Zone
+# ------------------------------------------------------------------------------
+# All servers and the load balancer's instance group live in this zone.
+# ==============================================================================
+
+variable "zone" {
+  description = "GCP zone for the servers (e.g., us-central1-a)"
+  type        = string
+  default     = "us-central1-a"
 }
