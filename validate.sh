@@ -89,8 +89,16 @@ done
 ok
 
 step "Connections granted to mcloud-users"
-CONNECTIONS="$(curl -sk --max-time 15 "${URL}api/session/data/postgresql/connections" \
-  -H "Guacamole-Token: ${TOKEN}" | jq -r '[.[].name] | sort | join(", ")')"
+# Retried like the sign-in: right after a user's first LDAPS sign-in the API
+# can answer with something other than the connection list.
+CONNECTIONS=""
+for ((i = 0; i < 12; i++)); do
+  CONNECTIONS="$(curl -sk --max-time 15 "${URL}api/session/data/postgresql/connections" \
+    -H "Guacamole-Token: ${TOKEN}" \
+    | jq -r '[.[].name] | sort | join(", ")' 2>/dev/null || true)"
+  [ "${CONNECTIONS}" = "MATE (RDP), MATE (SSH), Windows (RDP)" ] && break
+  sleep 10
+done
 [ "${CONNECTIONS}" = "MATE (RDP), MATE (SSH), Windows (RDP)" ] || fail "Expected three connections, got '${CONNECTIONS}'."
 ok "${CONNECTIONS}"
 curl -sk -o /dev/null -X DELETE "${URL}api/session" -H "Guacamole-Token: ${TOKEN}" || true
